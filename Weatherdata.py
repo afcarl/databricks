@@ -3,8 +3,8 @@ import urllib
 AWS_BUCKET_NAME = "mas-dse-public" 
 MOUNT_NAME = "NCDC-weather"
 # Access Key of Yoav / DSE
-ACCESS_KEY = "AKIAIYVNOK6TSDQWTPGQ" # ACCESS_KEY
-SECRET_KEY = "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" # SECRET_KEY
+ACCESS_KEY =  # ACCESS_KEY
+SECRET_KEY =  # SECRET_KEY
 ENCODED_SECRET_KEY = urllib.quote(SECRET_KEY, "")
 
 
