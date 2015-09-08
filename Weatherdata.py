@@ -1,12 +1,9 @@
-# Databricks notebook source exported at Mon, 7 Sep 2015 23:25:02 UTC
-import urllib
-AWS_BUCKET_NAME = "mas-dse-public" 
-MOUNT_NAME = "NCDC-weather"
-# Access Key of Yoav / DSE
-ACCESS_KEY =  # ACCESS_KEY
-SECRET_KEY =  # SECRET_KEY
-ENCODED_SECRET_KEY = urllib.quote(SECRET_KEY, "")
+# Databricks notebook source exported at Tue, 8 Sep 2015 22:24:17 UTC
+# MAGIC %run /Users/yfreund@ucsd.edu/Vault
 
+# COMMAND ----------
+
+# MAGIC %md ### Mount S3 bucket and navigate it
 
 # COMMAND ----------
 
@@ -17,6 +14,10 @@ dbutils.fs.mount("s3n://%s:%s@%s" % (ACCESS_KEY, ENCODED_SECRET_KEY, AWS_BUCKET_
 
 file_list=dbutils.fs.ls('/mnt/NCDC-weather/WeatherUncompressed/')
 [file.path for file in file_list[:3]]
+
+# COMMAND ----------
+
+# MAGIC %md ### read the first csv file
 
 # COMMAND ----------
 
@@ -33,7 +34,8 @@ data.take(3)
 
 # COMMAND ----------
 
-# MAGIC %sql DROP TABLE IF EXISTS Weather
+# MAGIC %md ### Sample a tiny part of the data
+# MAGIC Note that this command takes very little time. The actual work is done when you want to read the sample and use it for something
 
 # COMMAND ----------
 
@@ -47,20 +49,8 @@ data_sample.count()
 
 # COMMAND ----------
 
-def convert(x):
-  x = x.strip()
-  if x == '':
-    # The value goes missing
-    return np.nan
-  return float(x)
-
-# COMMAND ----------
-
-# MAGIC %sql DROP TABLE  Weather
-
-# COMMAND ----------
-
-# MAGIC %run /Users/yfreund@ucsd.edu/loggly
+# MAGIC %md ### Deleting a table
+# MAGIC One can use the sql command "DROP TABLE", but the underlying hive file remains. To completely remove the tabl use `dbutils.fs.rm` as below.
 
 # COMMAND ----------
 
@@ -72,9 +62,31 @@ dbutils.fs.rm('/user/hive/warehouse/weather/',recurse=True)
 
 # COMMAND ----------
 
+# MAGIC %md Using Loggly
+
+# COMMAND ----------
+
+# MAGIC %run /Users/yfreund@ucsd.edu/loggly
+
+# COMMAND ----------
+
+# An example routine that is inserted into the code to create the logs.
 def extract(d):
   logger.info("message here")
   return d
+
+# COMMAND ----------
+
+# MAGIC %md ### Main data extraction code
+
+# COMMAND ----------
+
+def convert(x):
+  x = x.strip()
+  if x == '':
+    # The value goes missing
+    return np.nan
+  return float(x)
 
 # COMMAND ----------
 
@@ -105,6 +117,10 @@ for i in range(len(file_list)):
 
 # COMMAND ----------
 
+# MAGIC %md ## Save dataframe as Table and as parquet files
+
+# COMMAND ----------
+
 combinedDataFrame.count()
 
 # COMMAND ----------
@@ -113,17 +129,26 @@ combinedDataFrame.saveAsTable("Weather")
 
 # COMMAND ----------
 
+dbutils.fs.ls("/mnt/%s/Weather/parquet" % MOUNT_NAME)
+combinedDataFrame.count()
+
+# COMMAND ----------
+
 combinedDataFrame.write.parquet("/mnt/%s/Weather/parquet/Weather.parquet" % MOUNT_NAME)
 
 # COMMAND ----------
 
-import pandas as pd
-import context
-dataframe = context.table("Weather")
+dbutils.fs.ls("/mnt/%s/Weather.parquet" % MOUNT_NAME)
 
 # COMMAND ----------
 
-dbutils.fs.ls("/mnt/%s/Weather.parquet" % MOUNT_NAME)
+#Expose sql table as dataframe
+import pandas as pd
+dataframe = sqlContext.table("Weather")
+
+# COMMAND ----------
+
+# MAGIC %md ### Playing around with SQL
 
 # COMMAND ----------
 
@@ -135,7 +160,11 @@ dbutils.fs.ls("/mnt/%s/Weather.parquet" % MOUNT_NAME)
 
 # COMMAND ----------
 
-dbutils.fs.ls('dbfs:/mnt/NCDC-weather/Weather/Info')
+dbutils.fs.ls('dbfs:/mnt/NCDC-weather/')
+
+# COMMAND ----------
+
+# MAGIC %md ### Loading and Parsing Stations data
 
 # COMMAND ----------
 
@@ -148,22 +177,22 @@ line
 
 # COMMAND ----------
 
-IV. FORMAT OF "ghcnd-stations.txt"
-
-------------------------------
-Variable   Columns   Type
-------------------------------
-ID            1-11   Character
-LATITUDE     13-20   Real
-LONGITUDE    22-30   Real
-ELEVATION    32-37   Real
-STATE        39-40   Character
-NAME         42-71   Character
-GSNFLAG      73-75   Character
-HCNFLAG      77-79   Character
-WMOID        81-85   Character
-------------------------------
-
+# MAGIC %text
+# MAGIC IV. FORMAT OF "ghcnd-stations.txt"
+# MAGIC 
+# MAGIC ------------------------------
+# MAGIC Variable   Columns   Type
+# MAGIC ------------------------------
+# MAGIC ID            1-11   Character
+# MAGIC LATITUDE     13-20   Real
+# MAGIC LONGITUDE    22-30   Real
+# MAGIC ELEVATION    32-37   Real
+# MAGIC STATE        39-40   Character
+# MAGIC NAME         42-71   Character
+# MAGIC GSNFLAG      73-75   Character
+# MAGIC HCNFLAG      77-79   Character
+# MAGIC WMOID        81-85   Character
+# MAGIC ------------------------------
 
 # COMMAND ----------
 
@@ -179,8 +208,13 @@ coltypes
 
 # COMMAND ----------
 
+coltypes
+
+# COMMAND ----------
+
 from string import strip
 def parse_station(line):
+  line=line.encode('utf-8')
   out=range(len(colspecs))
   for i in range(len(colspecs)):
     fr,to = colspecs[i]
@@ -197,6 +231,10 @@ stations_text=sc.textFile("/mnt/%s/Weather/Info/ghcnd-stations_buffered.txt" % M
 
 # COMMAND ----------
 
+stations_text.take(3)
+
+# COMMAND ----------
+
 stations_rows=stations_text.map(parse_station)
 
 # COMMAND ----------
@@ -209,45 +247,40 @@ station_info=sqlContext.createDataFrame(stations_rows, colnames)
 
 # COMMAND ----------
 
-stat
+station_info.show()
 
 # COMMAND ----------
 
-type(station_info.select('state'))
+station_info.drop_duplicates(['state']).show()
 
 # COMMAND ----------
 
-station_info.state.cast()
+state_col=station_info.select('state')
+states_table=state_col.distinct()
+type(states_table)
+states=[a.state for a in states_table.collect()]
+','.join(states)
 
 # COMMAND ----------
 
-states=station_info.select('state')
-states.distinct().count()
-
+# MAGIC %sql DROP TABLE Stations
 
 # COMMAND ----------
 
-states[:20]
-
-# COMMAND ----------
-
-set([1,2,3,2,5,3])
-
-# COMMAND ----------
-
+dbutils.fs.rm('/user/hive/warehouse/stations/',recurse=True)
 station_info.saveAsTable('Stations')
 
 # COMMAND ----------
 
-len(stations_rows)
+station_info.write.parquet("/mnt/%s/Weather/Info/stations.parquet" % MOUNT_NAME)
 
 # COMMAND ----------
 
-dataFrames[0].count()
+dbutils.fs.ls("/mnt/%s/Weather/" % MOUNT_NAME)
 
 # COMMAND ----------
 
-type(station_info)
+
 
 # COMMAND ----------
 
