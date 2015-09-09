@@ -1,5 +1,4 @@
-# Databricks notebook source exported at Tue, 8 Sep 2015 22:31:43 UTC
-
+# Databricks notebook source exported at Wed, 9 Sep 2015 01:40:54 UTC
 # MAGIC %run /Users/yfreund@ucsd.edu/Vault
 
 # COMMAND ----------
@@ -13,7 +12,137 @@ dbutils.fs.mount("s3n://%s:%s@%s" % (ACCESS_KEY, ENCODED_SECRET_KEY, AWS_BUCKET_
 
 # COMMAND ----------
 
-file_list=dbutils.fs.ls('/mnt/NCDC-weather/WeatherUncompressed/')
+file_list=dbutils.fs.ls('/mnt/NCDC-weather/')
 [file.path for file in file_list[:3]]
 
 # COMMAND ----------
+
+# MAGIC %md #### Find all distinct state values
+
+# COMMAND ----------
+
+# MAGIC %sql select distinct state from stations
+
+# COMMAND ----------
+
+# MAGIC %sql select * from stations limit 5
+
+# COMMAND ----------
+
+# MAGIC %md #### Count stations
+# MAGIC The following sql command counts the number of stations in each state in the US.
+
+# COMMAND ----------
+
+# MAGIC %sql select state as state,count(*) as count from stations where substr(id,0,2)=="US"  group by state
+
+# COMMAND ----------
+
+states = sqlContext.sql('select state as state,count(*) as count from stations where substr(id,0,2)=="US"  group by state')
+states.sort(['state']).show(100)
+
+# COMMAND ----------
+
+dataframe.count()
+
+# COMMAND ----------
+
+Continental_states = """Alabama		AL
+Arizona		AZ
+Arkansas	AR
+California	CA
+Colorado	CO
+Connecticut	CT
+Delaware	DE
+Florida		FL
+Georgia		GA
+Idaho		ID
+Illinois	IL
+Indiana		IN
+Iowa		IA
+Kansas		KS
+Kentucky	KY
+Louisiana	LA
+Maine		ME
+Maryland	MD
+Massachusetts	MA
+Michigan	MI
+Minnesota	MN
+Mississippi	MS
+Missouri	MO
+Montana		MT
+Nebraska	NE
+Nevada		NV
+New Hampshire	NH
+New Jersey	NJ
+New Mexico	NM
+New York	NY
+North Carolina	NC
+North Dakota	ND
+Ohio		OH
+Oklahoma	OK
+Oregon		OR
+Pennsylvania	PA
+Rhode Island	RI
+South Carolina	SC
+South Dakota	SD
+Tennessee	TN
+Texas		TX
+Utah		UT
+Vermont		VT
+Virginia	VA
+Washington	WA
+West Virginia	WV
+Wisconsin	WI
+Wyoming		WY""";
+
+non_continental_states= """Alaska		AK
+Hawaii		HI
+"""
+
+# COMMAND ----------
+
+us_states={line.split('\t')[-1]:line.split('\t')[0] for line in Continental_states.split('\n')}
+us_states
+
+
+# COMMAND ----------
+
+stations= sqlContext.sql('select * from stations')
+
+# COMMAND ----------
+
+stations.show()
+
+# COMMAND ----------
+
+cont_acronyms=us_states.keys()
+print len(cont_acronyms)
+print ','.join(cont_acronyms)
+
+# COMMAND ----------
+
+in_continental = [row.state in cont_acronyms for row in stations.select('state').collect()]
+print len(in_continental)
+print sum(in_continental)
+
+# COMMAND ----------
+
+Ca = sqlContext.sql("select * from weather where (state = 'CA' and measurement = 'TMAX'")
+
+# COMMAND ----------
+
+# MAGIC %sql select s.ID as station from stations as s where s.state='CA'
+
+# COMMAND ----------
+
+# MAGIC %sql select * from weather as w where (w.measurement = 'TMAX' and 
+# MAGIC                                   w.station in (select s.ID as station from stations as s where s.state='CA')
+# MAGIC                                  ) limit 10
+
+# COMMAND ----------
+
+# MAGIC %sql select * from weather where (measurement = 'TMAX' and station in (select id from stations where stations.state=='CA')) limit 10
+
+# COMMAND ----------
+
