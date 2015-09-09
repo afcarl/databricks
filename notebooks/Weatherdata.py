@@ -1,4 +1,4 @@
-# Databricks notebook source exported at Tue, 8 Sep 2015 22:36:57 UTC
+# Databricks notebook source exported at Wed, 9 Sep 2015 01:41:37 UTC
 # MAGIC %run /Users/yfreund@ucsd.edu/Vault
 
 # COMMAND ----------
@@ -131,10 +131,6 @@ combinedDataFrame.saveAsTable("Weather")
 
 dbutils.fs.ls("/mnt/%s/Weather/parquet" % MOUNT_NAME)
 #combinedDataFrame.count()
-
-# COMMAND ----------
-
-dbutils.fs.rm("/mnt/%s/Weather/parquet" % MOUNT_NAME,recurse=True)
 
 # COMMAND ----------
 
