@@ -1,4 +1,4 @@
-# Databricks notebook source exported at Wed, 9 Sep 2015 01:40:54 UTC
+# Databricks notebook source exported at Fri, 11 Sep 2015 02:52:47 UTC
 # MAGIC %run /Users/yfreund@ucsd.edu/Vault
 
 # COMMAND ----------
@@ -128,21 +128,71 @@ print sum(in_continental)
 
 # COMMAND ----------
 
-Ca = sqlContext.sql("select * from weather where (state = 'CA' and measurement = 'TMAX'")
-
-# COMMAND ----------
-
 # MAGIC %sql select s.ID as station from stations as s where s.state='CA'
 
 # COMMAND ----------
 
-# MAGIC %sql select * from weather as w where (w.measurement = 'TMAX' and 
-# MAGIC                                   w.station in (select s.ID as station from stations as s where s.state='CA')
-# MAGIC                                  ) limit 10
+# MAGIC %sql create table selectedstations as select s.ID from stations as s where s.state='CA'
 
 # COMMAND ----------
 
-# MAGIC %sql select * from weather where (measurement = 'TMAX' and station in (select id from stations where stations.state=='CA')) limit 10
+# MAGIC %sql select * from selectedstations limit 10
+
+# COMMAND ----------
+
+# MAGIC %sql create table weather2 as select w.*, s.state from weather w join stations s on w.station = s.ID
+
+# COMMAND ----------
+
+# MAGIC %sql select * from weather2 where (state='CA' and measurement='TMAX') limit 10
+
+# COMMAND ----------
+
+# MAGIC %md subqueries are not supported in spark-sql:
+# MAGIC `%sql select * from weather as w where (w.measurement = 'TMAX' and 
+# MAGIC                                   w.station in (select s.ID as station from stations as s where s.state='CA')
+# MAGIC                                  ) limit 10`
+
+# COMMAND ----------
+
+Ca = sqlContext.sql("select * from weather2 where (state = 'CA' and measurement = 'TMAX')")
+
+# COMMAND ----------
+
+Ca.count()
+
+# COMMAND ----------
+
+from pyspark.mllib.stat import Statistics
+
+# COMMAND ----------
+
+TMAX=Ca.select([str(i) for i in range(1,365)])
+
+# COMMAND ----------
+
+from pyspark.mllib.stat import Statistics
+from pyspark.mllib.linalg.distributed import RowMatrix
+
+mat = RowMatrix(TMAX)
+
+# Compute column summary statistics.
+summary = Statistics.colStats(mat)
+print(summary.mean())
+print(summary.variance())
+print(summary.numNonzeros())
+
+# COMMAND ----------
+
+pyspark.mllib.linalg.help() 
+
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
+pyspark.mllib.ver
 
 # COMMAND ----------
 
