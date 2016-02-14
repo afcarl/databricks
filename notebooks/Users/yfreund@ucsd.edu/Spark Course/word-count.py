@@ -1,4 +1,4 @@
-# Databricks notebook source exported at Sun, 14 Feb 2016 04:34:37 UTC
+# Databricks notebook source exported at Sun, 14 Feb 2016 04:35:03 UTC
 # MAGIC %md # Word-count in spark
 # MAGIC 
 # MAGIC This is a simple first example of using spark and databricks.
