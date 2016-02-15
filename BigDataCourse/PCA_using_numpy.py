@@ -1,4 +1,4 @@
-# Databricks notebook source exported at Mon, 15 Feb 2016 06:46:49 UTC
+# Databricks notebook source exported at Mon, 15 Feb 2016 07:48:35 UTC
 import numpy as np
 
 # COMMAND ----------
@@ -21,11 +21,10 @@ def sumWithNan(M1,M2):
 
 # COMMAND ----------
 
-# computeCov recieves as input a list of np arrays, all of the same length, and computes the covariance matrix for those
-def computeCov(list):
-  A=[np.insert(v,1,1) for v in list] # Inserting the element 1 allows us to compute the mean vector at the same time
-                                     # that we are computing the mean of the outer product.
-  RDD=sc.parallelize(A)
+# computeCov recieves as input an RDD of np arrays, all of the same length, and computes the covariance matrix for that set of vectors
+def computeCov(RDDin):
+  RDD=RDDin.map(lambda v:np.insert(v,1,1)) # insert a 1 at the beginning of each vector so that the same 
+                                           #calculation also yields the mean vector
   OuterRDD=RDD.map(outerProduct)
   (S,N)=OuterRDD.reduce(sumWithNan)
   E=S[0,1:]
@@ -88,7 +87,24 @@ C
 
 # COMMAND ----------
 
+Ca = sqlContext.sql("select * from weather2 where (state='CA' and measurement = 'TMAX')")
 
+# COMMAND ----------
+
+Ca.count()
+
+# COMMAND ----------
+
+RDD_ca=Ca.map(lambda v:np.array(v[3:-1])/10)
+
+# COMMAND ----------
+
+RDD_ca.first()
+
+# COMMAND ----------
+
+OUT=computeCov(RDD_ca)
+OUT
 
 # COMMAND ----------
 
