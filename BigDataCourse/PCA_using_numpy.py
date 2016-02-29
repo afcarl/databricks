@@ -1,17 +1,18 @@
-# Databricks notebook source exported at Mon, 29 Feb 2016 01:56:10 UTC
-import numpy as np
+# Databricks notebook source exported at Mon, 29 Feb 2016 02:16:59 UTC
+# MAGIC %md ### Performing PCA on vectors with NaNs
+# MAGIC This notebook demonstrates the use of numpy arrays as the content of RDDs
 
 # COMMAND ----------
 
+import numpy as np
+
 def outerProduct(X):
+  """Computer outer product and indicate which locations in matrix are undefined"""
   O=np.outer(X,X)
   N=1-np.isnan(O)
   return (O,N)
-
-
-# COMMAND ----------
-
 def sumWithNan(M1,M2):
+  """Add two pairs of matrix,count"""
   (X1,N1)=M1
   (X2,N2)=M2
   N=N1+N2
@@ -39,8 +40,10 @@ def computeCov(RDDin):
   NO=N[1:,1:]
   Cov=O/NO - np.outer(Mean,Mean)
   return Cov,Mean
-  
 
+# COMMAND ----------
+
+# MAGIC %md #### Demonstration on a small example
 
 # COMMAND ----------
 
@@ -58,20 +61,12 @@ computeCov(RDD)
 
 # COMMAND ----------
 
-#Ca = sqlContext.sql("select * from weather2 where ((state='CA' or state='CO' or state='AZ' or state='OR' or state='NE') and measurement = 'TMAX')")
+# MAGIC %md #### Demonstration on real data
+# MAGIC The following cells demonstrate the use of the code we wrote on the maximal-dayly temperature records for the state of california.
+
+# COMMAND ----------
+
 Ca = sqlContext.sql("select * from weather2 where (state='CA' and measurement = 'TMAX')")
-
-# COMMAND ----------
-
-states=Ca.map(lambda row:(row[-1],1)).collect()
-
-# COMMAND ----------
-
-from collections import Counter
-C=Counter()
-for s,i in states:
-  C[s]+=1
-C
 
 # COMMAND ----------
 
@@ -79,11 +74,15 @@ Ca.first()
 
 # COMMAND ----------
 
+# remove the entries that do not correspond to temperature and devide by 10 so that the result is in centigrates.
 RDD_ca=Ca.map(lambda v:np.array(v[3:-1])/10)
+RDD_ca.count()
 
 # COMMAND ----------
 
+# Remove entries that have 10 or more nan's
 RDD_ca=RDD_ca.filter(lambda row:sum(np.isnan(row))<10)
+RDD_ca.count()
 
 # COMMAND ----------
 
@@ -92,9 +91,6 @@ RDD_ca.first()
 # COMMAND ----------
 
 UnDef=RDD_ca.map(lambda row:sum(np.isnan(row))).collect()
-
-# COMMAND ----------
-
 x = range(365)
 fig, ax = plt.subplots()
 ax.hist(UnDef,bins=36)
@@ -115,10 +111,6 @@ OUT
 
 # COMMAND ----------
 
-import pylab as py
-
-# COMMAND ----------
-
 Cov[:10,:10]
 
 # COMMAND ----------
@@ -131,6 +123,7 @@ w,v=LA.eig(Cov)
 from datetime import date
 from numpy import shape
 import matplotlib.pyplot as plt
+import pylab as py
 from pylab import ylabel,grid,title
 
 dates=[date.fromordinal(i) for i in range(1,366)]
@@ -146,28 +139,12 @@ def YearlyPlots(T,ttl='',size=(10,7)):
     grid()
     title(ttl)
     return fig
-fig=YearlyPlots(-v[:,0:3],'Temperature')
+fig=YearlyPlots(v[:,0:3],'Eigen-Vectors')
 display(fig)
 
 # COMMAND ----------
 
-display(Mean)
-
-# COMMAND ----------
-
-fig =plt.figure(1,figsize=(10,7),dpi=300)
-fig.axes.plot([0,1,0])
-
-# COMMAND ----------
-
-import numpy as np
-import matplotlib.pyplot as plt
-
-x = range(365)
-print len(x)
-fig, ax = plt.subplots()
-ax.plot(x, Mean, 'r')
-ax.plot(x,v[:,0]*1000)
+fig=YearlyPlots(Mean,'Mean')
 display(fig)
 
 # COMMAND ----------
@@ -179,14 +156,6 @@ fig, ax = plt.subplots()
 ax.plot(x,Var)
 ax.grid()
 display(fig)
-
-# COMMAND ----------
-
-print Var[:10]
-
-# COMMAND ----------
-
-v.shape
 
 # COMMAND ----------
 
