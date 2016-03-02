@@ -1,4 +1,4 @@
-# Databricks notebook source exported at Sun, 14 Feb 2016 04:37:42 UTC
+# Databricks notebook source exported at Wed, 2 Mar 2016 00:10:20 UTC
 # MAGIC %md # Word-count in spark
 # MAGIC 
 # MAGIC This is a simple first example of using spark and databricks.
@@ -37,11 +37,8 @@ AWS_BUCKET_NAME = "mas-dse-public"
 MOUNT_NAME = "NCDC-weather"
 dbutils.fs.unmount("/mnt/%s" % MOUNT_NAME)
 output_code=dbutils.fs.mount("s3n://%s:%s@%s" % (ACCESS_KEY, ENCODED_SECRET_KEY, AWS_BUCKET_NAME), "/mnt/%s" % MOUNT_NAME)
-print output_code
-
-# COMMAND ----------
-
-file_list=dbutils.fs.ls('/mnt/%s'%MOUNT_NAME)
+print 'Mount output status=',output_code
+file_list=dbutils.fs.ls('/mnt/%s/Spark-Data/mllib/'%MOUNT_NAME)
 file_list
 
 # COMMAND ----------
