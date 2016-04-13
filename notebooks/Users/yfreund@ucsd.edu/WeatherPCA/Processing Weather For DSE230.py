@@ -1,13 +1,13 @@
-# Databricks notebook source exported at Wed, 13 Apr 2016 19:23:35 UTC
+# Databricks notebook source exported at Wed, 13 Apr 2016 22:01:30 UTC
 # MAGIC %run /Users/yfreund@ucsd.edu/Vault
 
 # COMMAND ----------
 
 AWS_BUCKET_NAME = "mas-dse-public" 
 MOUNT_NAME = "NCDC-weather"
-print "ACCESS_KEY=",ACCESS_KEY
-print "SECRET_KEY=",SECRET_KEY
-print "ENCODED_SECRET_KEY=",ENCODED_SECRET_KEY
+#print "ACCESS_KEY=",ACCESS_KEY
+#print "SECRET_KEY=",SECRET_KEY
+#print "ENCODED_SECRET_KEY=",ENCODED_SECRET_KEY
 dbutils.fs.unmount("/mnt/%s" % MOUNT_NAME)
 output_code=dbutils.fs.mount("s3n://%s:%s@%s" % (ACCESS_KEY, ENCODED_SECRET_KEY, AWS_BUCKET_NAME), "/mnt/%s" % MOUNT_NAME)
 print output_code
@@ -19,30 +19,14 @@ print output_code
 
 # COMMAND ----------
 
-dbutils.fs.mount?
-
-# COMMAND ----------
-
-AWS_BUCKET_NAME = "mas-dse-public" 
-MOUNT_NAME = "NCDC-weather"
-print "ACCESS_KEY=",ACCESS_KEY
-print "SECRET_KEY=",SECRET_KEY
-print "ENCODED_SECRET_KEY=",ENCODED_SECRET_KEY
-dbutils.fs.unmount("/mnt/%s" % MOUNT_NAME)
-output_code=dbutils.fs.mount("s3n://%s:%s@%s" % (ACCESS_KEY, ENCODED_SECRET_KEY, AWS_BUCKET_NAME), "/mnt/%s" % MOUNT_NAME)
-print output_code
-print "s3n://%s:%s@%s" % (ACCESS_KEY, ENCODED_SECRET_KEY, AWS_BUCKET_NAME), "/mnt/%s" % MOUNT_NAME
-
-# COMMAND ----------
-
-file_list=dbutils.fs.ls('/mnt/%s/Weather/parquet/Weather.parquet/'%MOUNT_NAME)
+file_list=dbutils.fs.ls('/mnt/%s/Weather/'%MOUNT_NAME)
 for file in file_list:
   print file
 #[file.path for file in file_list[:3]]
 
 # COMMAND ----------
 
-parquet_file='/mnt/%s/Weather/parquet/Weather.parquet/'%MOUNT_NAME
+parquet_file='/mnt/NCDC-weather/Weather/Weather.parquet/' #|'/mnt/%s/Weather/parquet/Weather.parquet/'%MOUNT_NAME
 df = sqlContext.read.load(parquet_file)
 #df = sqlContext.sql("SELECT * FROM WHERE parquet.`%s`"%parquet_file)
 
@@ -52,19 +36,63 @@ df.count()
 
 # COMMAND ----------
 
-# MAGIC %sql list tables
+stations_parquet='/mnt/NCDC-weather/Weather/Weather_Stations.parquet/'
+stations_df = sqlContext.sql("SELECT * FROM  parquet.`%s`  where latitude>24 and latitude<50 and longitude > -125 and longitude < -66"%stations_parquet)
+stations_df.show(5)
 
 # COMMAND ----------
 
-# MAGIC %md #### Find all distinct state values
+stations_long_lat=stations_df.select(['ID','longitude','latitude','elevation'])
+stations_long_lat.columns
 
 # COMMAND ----------
 
-# MAGIC %sql select distinct state from stations
+stations_long_lat.show(5)
 
 # COMMAND ----------
 
-# MAGIC %sql select * from stations limit 5
+df.columns[:5]
+
+# COMMAND ----------
+
+US_df=df.join(stations_long_lat, stations_long_lat.ID == df.station,'inner')
+
+# COMMAND ----------
+
+US_df.count()
+
+# COMMAND ----------
+
+US_df.write.parquet("/mnt/NCDC-weather/Weather/US_Weather.parquet")
+
+# COMMAND ----------
+
+sqlContext.tableNames()
+
+# COMMAND ----------
+
+stations_df = sqlContext.table('stations')
+stations_df.count()
+
+# COMMAND ----------
+
+stations_parquet="/mnt/NCDC-weather/Weather_Stations.parquet"
+stations_df.write.parquet(stations_parquet)
+
+# COMMAND ----------
+
+# MAGIC %md #### Read all stations that are within the continental USA
+# MAGIC Plus some margins:
+# MAGIC * **Longitude:** 66 - 125
+# MAGIC * **Latitude:** 24 - 50
+
+# COMMAND ----------
+
+
+
+# COMMAND ----------
+
+'/mnt/NCDC-weather/Weather.parquet/'
 
 # COMMAND ----------
 
