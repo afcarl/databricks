@@ -1,4 +1,4 @@
-# Databricks notebook source exported at Mon, 29 Feb 2016 02:16:59 UTC
+# Databricks notebook source exported at Thu, 14 Apr 2016 05:49:05 UTC
 # MAGIC %md ### Performing PCA on vectors with NaNs
 # MAGIC This notebook demonstrates the use of numpy arrays as the content of RDDs
 
@@ -30,11 +30,12 @@ def computeCov(RDDin):
   (S,N)=OuterRDD.reduce(sumWithNan)
   # Unpack result and compute the covariance matrix
   #print 'RDD=',RDD.collect()
-  print S.shape, N.shape
+  print 'shape of S=',S.shape,'shape of N=',N.shape
   #print 'S=',S
   #print 'N=',N
   E=S[0,1:]
   NE=N[0,1:]
+  print 'shape of E=',E.shape,'shape of NE=',NE.shape
   Mean=E/NE
   O=S[1:,1:]
   NO=N[1:,1:]
@@ -66,39 +67,70 @@ computeCov(RDD)
 
 # COMMAND ----------
 
-Ca = sqlContext.sql("select * from weather2 where (state='CA' and measurement = 'TMAX')")
+TMAX = sqlContext.sql("select * from weather where measurement = 'TMAX'")
 
 # COMMAND ----------
 
-Ca.first()
+print type(TMAX)
+print TMAX.count()
 
 # COMMAND ----------
 
+# MAGIC %run /Users/yfreund@ucsd.edu/Vault
+
+# COMMAND ----------
+
+AWS_BUCKET_NAME = "mas-dse-public" 
+MOUNT_NAME = "NCDC-weather"
+dbutils.fs.unmount("/mnt/%s" % MOUNT_NAME)
+output_code=dbutils.fs.mount("s3n://%s:%s@%s" % (ACCESS_KEY, ENCODED_SECRET_KEY, AWS_BUCKET_NAME), "/mnt/%s" % MOUNT_NAME)
+print 'Mount output status=',output_code
+file_list=dbutils.fs.ls('/mnt/%s/Weather'%MOUNT_NAME)
+file_list
+
+# COMMAND ----------
+
+US_Weather_parquet='/mnt/NCDC-weather/Weather/US_Weather.parquet/'
+df = sqlContext.sql("SELECT * FROM  parquet.`%s`  where measurement=='TMAX'"%US_Weather_parquet)
+df.show(5)
+
+# COMMAND ----------
+
+# We transform the dataframe into an RDD of numpy arrays
 # remove the entries that do not correspond to temperature and devide by 10 so that the result is in centigrates.
-RDD_ca=Ca.map(lambda v:np.array(v[3:-1])/10)
-RDD_ca.count()
+rdd=df.map(lambda v:np.array(v[3:-4])/10).cache()
+rdd.count()
 
 # COMMAND ----------
 
-# Remove entries that have 10 or more nan's
-RDD_ca=RDD_ca.filter(lambda row:sum(np.isnan(row))<10)
-RDD_ca.count()
+rows=rdd.take(5)
+len(rows[1])
 
 # COMMAND ----------
 
-RDD_ca.first()
-
-# COMMAND ----------
-
-UnDef=RDD_ca.map(lambda row:sum(np.isnan(row))).collect()
-x = range(365)
+import matplotlib.pyplot as plt
+UnDef=rdd.map(lambda row:sum(np.isnan(row))).collect()
 fig, ax = plt.subplots()
 ax.hist(UnDef,bins=36)
 display(fig)
 
 # COMMAND ----------
 
-OUT=computeCov(RDD_ca)
+# Remove entries that have 10 or more nan's
+rdd=rdd.filter(lambda row:sum(np.isnan(row))<1)
+rdd.count()
+
+# COMMAND ----------
+
+rdd.first()
+
+# COMMAND ----------
+
+# MAGIC %md ## compute covariance
+
+# COMMAND ----------
+
+OUT=computeCov(rdd)
 OUT
 
 # COMMAND ----------
@@ -139,7 +171,7 @@ def YearlyPlots(T,ttl='',size=(10,7)):
     grid()
     title(ttl)
     return fig
-fig=YearlyPlots(v[:,0:3],'Eigen-Vectors')
+fig=YearlyPlots(v[:,:4],'Eigen-Vectors')
 display(fig)
 
 # COMMAND ----------
