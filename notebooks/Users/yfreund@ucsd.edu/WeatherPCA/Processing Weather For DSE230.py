@@ -1,4 +1,4 @@
-# Databricks notebook source exported at Wed, 13 Apr 2016 22:01:30 UTC
+# Databricks notebook source exported at Sat, 16 Apr 2016 03:35:17 UTC
 # MAGIC %run /Users/yfreund@ucsd.edu/Vault
 
 # COMMAND ----------
@@ -22,11 +22,10 @@ print output_code
 file_list=dbutils.fs.ls('/mnt/%s/Weather/'%MOUNT_NAME)
 for file in file_list:
   print file
-#[file.path for file in file_list[:3]]
 
 # COMMAND ----------
 
-parquet_file='/mnt/NCDC-weather/Weather/Weather.parquet/' #|'/mnt/%s/Weather/parquet/Weather.parquet/'%MOUNT_NAME
+parquet_file='/mnt/NCDC-weather/Weather/US_Weather.parquet/' #|'/mnt/%s/Weather/parquet/Weather.parquet/'%MOUNT_NAME
 df = sqlContext.read.load(parquet_file)
 #df = sqlContext.sql("SELECT * FROM WHERE parquet.`%s`"%parquet_file)
 
@@ -36,12 +35,27 @@ df.count()
 
 # COMMAND ----------
 
+# MAGIC %md #### Read information about stations that are within the continental USA
+# MAGIC (Plus some margins)
+# MAGIC 
+# MAGIC * **Northernmost point**
+# MAGIC Northwest Angle, Minnesota (49°23'4.1" N) 
+# MAGIC * **Southernmost point**
+# MAGIC Ballast Key, Florida ( 24°31′15″ N) 
+# MAGIC * **Easternmost point**
+# MAGIC Sail Rock, just offshore of West Quoddy Head, Maine (66°57' W) ~ -66
+# MAGIC * **Westernmost point**
+# MAGIC Bodelteh Islands offshore from Cape Alava, Washington (124°46' W) ~ -124
+
+# COMMAND ----------
+
 stations_parquet='/mnt/NCDC-weather/Weather/Weather_Stations.parquet/'
 stations_df = sqlContext.sql("SELECT * FROM  parquet.`%s`  where latitude>24 and latitude<50 and longitude > -125 and longitude < -66"%stations_parquet)
 stations_df.show(5)
 
 # COMMAND ----------
 
+# select just ID logitude latitude and elevation
 stations_long_lat=stations_df.select(['ID','longitude','latitude','elevation'])
 stations_long_lat.columns
 
@@ -55,221 +69,43 @@ df.columns[:5]
 
 # COMMAND ----------
 
-US_df=df.join(stations_long_lat, stations_long_lat.ID == df.station,'inner')
+# Join the station table with the main dataframe. THis both removes stations far from the US 
+# and adds columns corresponding to longitude, latitude, and elevation.
+
+US_df=df.join(stations_long_lat, stations_long_lat.ID == df.station,'inner').drop('ID')
 
 # COMMAND ----------
 
+US_df=df
 US_df.count()
 
 # COMMAND ----------
 
-US_df.write.parquet("/mnt/NCDC-weather/Weather/US_Weather.parquet")
+US_df.columns[:5],US_df.columns[-5:]
 
 # COMMAND ----------
 
-sqlContext.tableNames()
+count_rows=US_df.groupby('measurement').count().collect()
 
 # COMMAND ----------
 
-stations_df = sqlContext.table('stations')
-stations_df.count()
+counts=[(e['measurement'],e['count']) for e in count_rows]
+counts.sort(key=lambda x:x[1],reverse=True)
+counts
 
 # COMMAND ----------
 
-stations_parquet="/mnt/NCDC-weather/Weather_Stations.parquet"
-stations_df.write.parquet(stations_parquet)
+L=US_df.take(10)
 
 # COMMAND ----------
 
-# MAGIC %md #### Read all stations that are within the continental USA
-# MAGIC Plus some margins:
-# MAGIC * **Longitude:** 66 - 125
-# MAGIC * **Latitude:** 24 - 50
-
-# COMMAND ----------
-
-
-
-# COMMAND ----------
-
-'/mnt/NCDC-weather/Weather.parquet/'
-
-# COMMAND ----------
-
-# MAGIC %md #### Count stations
-# MAGIC The following sql command counts the number of stations in each state in the US.
-
-# COMMAND ----------
-
-# MAGIC %sql select state as state,count(*) as count from stations where substr(id,0,2)=="US"  group by state
-
-# COMMAND ----------
-
-states = sqlContext.sql('select state as state,count(*) as count from stations where substr(id,0,2)=="US"  group by state')
-states.sort(['state']).show(100)
-
-# COMMAND ----------
-
-dataframe.count()
-
-# COMMAND ----------
-
-Continental_states = """Alabama		AL
-Arizona		AZ
-Arkansas	AR
-California	CA
-Colorado	CO
-Connecticut	CT
-Delaware	DE
-Florida		FL
-Georgia		GA
-Idaho		ID
-Illinois	IL
-Indiana		IN
-Iowa		IA
-Kansas		KS
-Kentucky	KY
-Louisiana	LA
-Maine		ME
-Maryland	MD
-Massachusetts	MA
-Michigan	MI
-Minnesota	MN
-Mississippi	MS
-Missouri	MO
-Montana		MT
-Nebraska	NE
-Nevada		NV
-New Hampshire	NH
-New Jersey	NJ
-New Mexico	NM
-New York	NY
-North Carolina	NC
-North Dakota	ND
-Ohio		OH
-Oklahoma	OK
-Oregon		OR
-Pennsylvania	PA
-Rhode Island	RI
-South Carolina	SC
-South Dakota	SD
-Tennessee	TN
-Texas		TX
-Utah		UT
-Vermont		VT
-Virginia	VA
-Washington	WA
-West Virginia	WV
-Wisconsin	WI
-Wyoming		WY""";
-
-non_continental_states= """Alaska		AK
-Hawaii		HI
-"""
-
-# COMMAND ----------
-
-us_states={line.split('\t')[-1]:line.split('\t')[0] for line in Continental_states.split('\n')}
-us_states
-
-
-# COMMAND ----------
-
-stations= sqlContext.sql('select * from stations')
-
-# COMMAND ----------
-
-stations.show()
-
-# COMMAND ----------
-
-cont_acronyms=us_states.keys()
-print len(cont_acronyms)
-print ','.join(cont_acronyms)
-
-# COMMAND ----------
-
-in_continental = [row.state in cont_acronyms for row in stations.select('state').collect()]
-print len(in_continental)
-print sum(in_continental)
-
-# COMMAND ----------
-
-# MAGIC %sql select s.ID as station from stations as s where s.state='CA'
-
-# COMMAND ----------
-
-# MAGIC %sql create table selectedstations as select s.ID from stations as s where s.state='CA'
-
-# COMMAND ----------
-
-# MAGIC %sql select * from selectedstations limit 10
-
-# COMMAND ----------
-
-# MAGIC %sql create table weather2 as select w.*, s.state from weather w join stations s on w.station = s.ID
-
-# COMMAND ----------
-
-# MAGIC %sql select * from weather2 where (state='CA' and measurement='TMAX') limit 10
-
-# COMMAND ----------
-
-# MAGIC %md subqueries are not supported in spark-sql:
-# MAGIC `%sql select * from weather as w where (w.measurement = 'TMAX' and 
-# MAGIC                                   w.station in (select s.ID as station from stations as s where s.state='CA')
-# MAGIC                                  ) limit 10`
-
-# COMMAND ----------
-
-Ca = sqlContext.sql("select * from weather2 where (state='CA' and measurement = 'TMAX')")
-
-# COMMAND ----------
-
-Ca.count()
-
-# COMMAND ----------
-
-from pyspark.mllib.stat import Statistics
-
-# COMMAND ----------
-
-Row=Ca.first()
-Row
-
-# COMMAND ----------
-
-import numpy as np
-v=np.array(Row[3:-1])
-sum(np.isnan(v))
-
-# COMMAND ----------
-
-TMAX=Ca.select([str(i) for i in range(1,365)])
-
-# COMMAND ----------
-
-from pyspark.mllib.stat import Statistics
-#from pyspark.mllib.linalg.distributed import RowMatrix
-
-mat = TMAX.rdd()
-
-# Compute column summary statistics.
-summary = Statistics.colStats(mat)
-print(summary.mean())
-print(summary.variance())
-print(summary.numNonzeros())
-
-# COMMAND ----------
-
-from pyspark.mllib.linalg import Vectors
-rdd = sc.parallelize([Vectors.dense([2, 0, 0, -2]),
-                      Vectors.dense([4, 5, 0,  3]),
-                      Vectors.dense([6, 7, 0,  8])])
-
-# COMMAND ----------
-
-pyspark.mllib.linalg.help() 
+def delta(x):
+  import numpy as np
+  c=sum([np.isnan(x[str(i)]) for i in range(1,366)])
+  z=np.zeros(365)
+  z[364-c]=1.
+  return (x['measurement'],z)
+[delta(l) for l in L]
 
 # COMMAND ----------
 
@@ -277,15 +113,53 @@ pyspark.mllib.linalg.help()
 
 # COMMAND ----------
 
-pyspark.mllib.ver
+from pickle import dumps
+dbutils.fs.put("/mnt/NCDC-weather/Weather/US_counts.pickle",dumps(US_counts),True)
 
 # COMMAND ----------
 
-TMAX.rdd()
+#Create a sample RDD for debugging
+Sample=US_df.sample(False,0.000001)
+Sample.count()
 
 # COMMAND ----------
 
-1+1
+US_counts_RDD=US_df.map(delta).reduceByKey(lambda x,y: x+y).cache()
 
 # COMMAND ----------
 
+US_counts=US_counts_RDD.collect()
+
+# COMMAND ----------
+
+#Sort according to total count.
+US_counts3=[(e[0],sum(e[1]),e[1]) for e in US_counts]
+US_counts3.sort(key=lambda x:x[1],reverse=True)
+US_counts3[1]
+
+# COMMAND ----------
+
+import matplotlib.pyplot as plt
+columns=5; rows=5
+fig,ax = plt.subplots(rows,columns)
+for i in range(columns*rows):
+  name,total,counts = US_counts3[i]
+  if i>=rows*columns: break
+  col = i % columns
+  row = i / columns
+  axis=ax[row][col]
+  axis.step(range(1,len(counts)+1),counts)
+  #axis.title=name+':  '
+  #axis.xlim([0,365])
+display(fig)
+
+# COMMAND ----------
+
+from pickle import dumps
+dbutils.fs.put("/mnt/NCDC-weather/Weather/US_counts.pickle",dumps(US_counts),True)
+
+
+
+# COMMAND ----------
+
+# MAGIC %md ### END
