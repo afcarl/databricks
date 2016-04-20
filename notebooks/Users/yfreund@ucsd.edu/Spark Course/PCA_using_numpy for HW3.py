@@ -1,4 +1,4 @@
-# Databricks notebook source exported at Wed, 20 Apr 2016 03:13:27 UTC
+# Databricks notebook source exported at Wed, 20 Apr 2016 06:07:38 UTC
 # MAGIC %md ### Performing PCA on vectors with NaNs
 # MAGIC This notebook demonstrates the use of numpy arrays as the content of RDDs
 
@@ -62,7 +62,16 @@ def computeOverAllDist(rdd0):
   SortedVals=sorted(Vals)
   low100,high100=find_percentiles(SortedVals,100)
   low1000,high1000=find_percentiles(SortedVals,1000)
-  return UnDef,mean,std,SortedVals,low100,high100,low1000,high1000
+  return {'UnDef':UnDef,\
+          'mean':mean,\
+          'std':std,\
+          'SortedVals':SortedVals,\
+          'low100':low100,\
+          'high100':high100,\
+          'low1000':low100,\
+          'high1000':high1000
+          }
+
 
 
 # COMMAND ----------
@@ -87,6 +96,11 @@ computeCov(RDD)
 
 # MAGIC %md #### Demonstration on real data
 # MAGIC The following cells demonstrate the use of the code we wrote on the maximal-dayly temperature records for the state of california.
+
+# COMMAND ----------
+
+N=sc.defaultParallelism
+print 'Number of executors=',N
 
 # COMMAND ----------
 
@@ -129,38 +143,88 @@ rdd0=df.map(lambda row:(row['station'],((row['measurement'],row['year']),np.arra
 
 # COMMAND ----------
 
+meas='PRCP'
+Query="SELECT * FROM parquet.`%s`\n\tWHERE measurement = '%s'"%(US_Weather_parquet,meas)
+print Query
+df = sqlContext.sql(Query)
+rdd0=df.map(lambda row:(row['station'],((row['measurement'],row['year']),np.array([np.float64(row[str(i)]) for i in range(1,366)])))).cache()
+
 rdd1=rdd0.sample(False,0.01)\
-         .repartition(60)\
-         .map(lambda (key,val): (val[0][0],val[1])).cache()  # make the measurement type the only key
-Tables={}
-for meas in measurements:
-  Tables[meas]=rdd1.filter(lambda (key,val): key==meas).map(lambda (key,val): val).repartition(60).cache()
-  print meas,Tables[meas].count()
+         .map(lambda (key,val): val[1])\
+         .cache()\
+         .repartition(N)
+print rdd1.count()
+
+STAT[meas]=computeOverAllDist(rdd1)   # Compute the statistics 
+print meas,STAT.keys()
+low1000 = STAT[meas]['low1000']  # unpack the statistics
+high1000 = STAT[meas]['high1000']
+
+
+
+# COMMAND ----------
+
+rdd2=rdd1.map(lambda V: np.array([x if (x>low1000-1) and (x<high1000+1) else np.nan for x in V]))
+#print meas,'before removing rows',rdd2.count()
+# Remove entries that have 50 or more nan's
+rdd3=rdd2.filter(lambda row:sum(np.isnan(row))<50)
+#print meas,'after removing rows with too many nans',rdd3.count()
+Clean_Tables[meas]=rdd3.cache().repartition(N)
+C=Clean_Tables[meas].count()
+print meas,C
+
+
+# COMMAND ----------
+
+low1000,high1000
+
+# COMMAND ----------
+
+rdd1=rdd0.sample(False,0.01)\
+         .map(lambda (key,val): val[1])\
+         .cache()\
+         .repartition(N)
+rdd1.count()
+
+# COMMAND ----------
+
+tmp=computeOverAllDist(rdd1) 
+
+# COMMAND ----------
+
+tmp.keys(),tmp['mean'],tmp['std']
 
 # COMMAND ----------
 
 Clean_Tables={}
-Statistics={}
+STAT={}
 Names=['UnDef','mean','std','SortedVals','low100','high100','low1000','high1000']
 STAT={}
 for meas in measurements: #measurements:   #for each type of measurement, do
   rdd1=Tables[meas]
-  tmp=computeOverAllDist(rdd1)   # Compute the statistics 
-  STAT[meas]={Names[i]:tmp[i] for i in range(len(tmp))}
+  STAT[meas]=computeOverAllDist(rdd1)   # Compute the statistics 
   print meas,STAT.keys()
-  UnDef,mean,std,SortedVals,low100,high100,low1000,high1000 = STAT[meas]  # unpack the statistics UnDef is an array holding the number of undefined in each row.
+  low1000 = STAT[meas]['low1000']  # unpack the statistics UnDef is an array holding the number of undefined in each row.
+  high1000 = STAT[meas]['high1000']
                                                               
-  rdd2=rdd1.map(lambda V: np.array([x if (x>low1000-1) and (x<high1000+1) else np.nan for x in V])).cache()
+  rdd2=rdd1.map(lambda V: np.array([x if (x>low1000-1) and (x<high1000+1) else np.nan for x in V]))
   #print meas,'before removing rows',rdd2.count()
   # Remove entries that have 50 or more nan's
-  rdd3=rdd2.filter(lambda row:sum(np.isnan(row))<50).cache()
+  rdd3=rdd2.filter(lambda row:sum(np.isnan(row))<50)
   #print meas,'after removing rows with too many nans',rdd3.count()
-  Clean_Tables[meas]=rdd3
+  Clean_Tables[meas]=rdd3.cache().repartition(N)
+  C=Clean_Tables[meas].count()
+  print meas,C
   
 
 # COMMAND ----------
 
-Clean_Tables['PRCP'].count()
+[(meas,len(STAT[meas])) for meas in measurements]
+
+# COMMAND ----------
+
+#[(meas,Clean_Tables[meas].count()) for meas in measurements]
+Clean_Tables['TMAX']
 
 # COMMAND ----------
 
