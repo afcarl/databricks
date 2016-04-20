@@ -1,4 +1,4 @@
-# Databricks notebook source exported at Wed, 20 Apr 2016 06:07:38 UTC
+# Databricks notebook source exported at Wed, 20 Apr 2016 16:09:08 UTC
 # MAGIC %md ### Performing PCA on vectors with NaNs
 # MAGIC This notebook demonstrates the use of numpy arrays as the content of RDDs
 
@@ -42,7 +42,7 @@ def computeCov(RDDin):
   Cov=O/NO - np.outer(Mean,Mean)
   # Output also the diagnal which is the variance for each day
   Var=np.array([Cov[i,i] for i in range(Cov.shape[0])])
-  return E,NE,O,NO,Cov,Mean,Var
+  return {'E':E,'NE':NE,'O':O,'NO':NO,'Cov':Cov,'Mean':Mean,'Var':Var}
 
 # COMMAND ----------
 
@@ -52,14 +52,14 @@ def find_percentiles(SortedVals,percentile):
   return SortedVals[L],SortedVals[-L]
   
 def computeOverAllDist(rdd0):
-  UnDef=rdd0.map(lambda row:sum(np.isnan(row))).collect()
+  UnDef=np.array(rdd0.map(lambda row:sum(np.isnan(row))).sample(False,0.01).collect())
   flat=rdd0.flatMap(lambda v:list(v)).filter(lambda x: not np.isnan(x)).cache()
   count,S1,S2=flat.map(lambda x: np.float64([1,x,x**2]))\
                   .reduce(lambda x,y: x+y)
   mean=S1/count
   std=np.sqrt(S2/count-mean**2)
   Vals=flat.sample(False,0.001).collect()
-  SortedVals=sorted(Vals)
+  SortedVals=np.array(sorted(Vals))
   low100,high100=find_percentiles(SortedVals,100)
   low1000,high1000=find_percentiles(SortedVals,1000)
   return {'UnDef':UnDef,\
@@ -149,7 +149,7 @@ print Query
 df = sqlContext.sql(Query)
 rdd0=df.map(lambda row:(row['station'],((row['measurement'],row['year']),np.array([np.float64(row[str(i)]) for i in range(1,366)])))).cache()
 
-rdd1=rdd0.sample(False,0.01)\
+rdd1=rdd0.sample(False,1)\
          .map(lambda (key,val): val[1])\
          .cache()\
          .repartition(N)
@@ -157,10 +157,14 @@ print rdd1.count()
 
 STAT[meas]=computeOverAllDist(rdd1)   # Compute the statistics 
 print meas,STAT.keys()
-low1000 = STAT[meas]['low1000']  # unpack the statistics
+low1000 = STAT[meas]['low1000']  # unpack the extreme values statistics
 high1000 = STAT[meas]['high1000']
 
 
+
+# COMMAND ----------
+
+#N=10 # use fewer partitions for small sample RDDs
 
 # COMMAND ----------
 
@@ -176,7 +180,44 @@ print meas,C
 
 # COMMAND ----------
 
-low1000,high1000
+meas,Clean_Tables[meas].count()
+
+# COMMAND ----------
+
+OUT=computeCov(Clean_Tables[meas])
+OUT.keys()
+
+# COMMAND ----------
+
+from numpy import linalg as LA
+eigval,eigvec=LA.eig(OUT['Cov'])
+
+# COMMAND ----------
+
+STAT[meas]['eigval']=eigval
+STAT[meas]['eigvec']=eigvec
+STAT[meas].update(OUT)
+STAT[meas].keys()
+
+# COMMAND ----------
+
+for key in STAT[meas].keys():
+  e=STAT[meas][key]
+  if type(e)==list:
+    print key,'list',len(e)
+  elif type(e)==np.ndarray:
+    print key,'ndarray',e.shape
+  elif type(e)==np.float64:
+    print key,'scalar'
+  else:
+    print 'Error type=',type(e)
+
+
+# COMMAND ----------
+
+fig=YearlyPlots(v[:,:3],'Eigen-Vectors')
+display(fig)
+
 
 # COMMAND ----------
 
@@ -340,7 +381,7 @@ rdd.count()
 # COMMAND ----------
 
 OUT=computeCov(Clean_Tables['TMAX'])
-OUT
+len(OUT)
 
 # COMMAND ----------
 
@@ -394,6 +435,10 @@ display(fig)
 
 # COMMAND ----------
 
+
+
+# COMMAND ----------
+
 from datetime import date
 from numpy import shape
 import matplotlib.pyplot as plt
@@ -418,8 +463,6 @@ def YearlyPlots(T,ttl='',lbl='eigen',Ylabel='TMAX',size=(14,7)):
     ax.legend()
     title(ttl)
     return fig
-fig=YearlyPlots(v[:,:3],'Eigen-Vectors')
-display(fig)
 
 
 # COMMAND ----------
